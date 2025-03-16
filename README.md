@@ -1,5 +1,9 @@
 # terraform-aws-ecs-cluster-fargate
 
+[![Terraform Lint & Validate](https://github.com/tfstack/terraform-aws-ecs-cluster-fargate/actions/workflows/terraform-lint-validate.yml/badge.svg)](https://github.com/tfstack/terraform-aws-ecs-cluster-fargate/actions/workflows/terraform-lint-validate.yml)
+[![Markdown Lint](https://github.com/tfstack/terraform-aws-ecs-cluster-fargate/actions/workflows/markdown-lint.yml/badge.svg)](https://github.com/tfstack/terraform-aws-ecs-cluster-fargate/actions/workflows/markdown-lint.yml)
+[![Commit Message Conformance](https://github.com/tfstack/terraform-aws-ecs-cluster-fargate/actions/workflows/commitmsg-conform.yml/badge.svg)](https://github.com/tfstack/terraform-aws-ecs-cluster-fargate/actions/workflows/commitmsg-conform.yml)
+
 Terraform module to create an ECS Fargate cluster with optional CloudWatch monitoring and logging support
 
 ## Requirements
