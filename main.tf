@@ -244,7 +244,7 @@ resource "aws_iam_policy" "ecs_cloudwatch_logs" {
           "logs:DescribeLogStreams",
           "logs:PutLogEvents"
         ],
-        Resource = "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/ecs/${var.cluster_name}-${each.key}*"
+        Resource = "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/ecs/${var.cluster_name}-${each.key}*"
       }
     ]
   })
@@ -309,7 +309,7 @@ resource "aws_iam_policy" "ecs_ecr_access" {
           "ecr:GetDownloadUrlForLayer",
           "ecr:BatchGetImage"
         ]
-        Resource = "arn:aws:ecr:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:repository/*"
+        Resource = "arn:aws:ecr:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:repository/*"
       }
     ]
   })

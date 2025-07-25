@@ -6,13 +6,13 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "5.84.0"
+      version = ">= 6.0.0"
     }
   }
 }
 
 provider "aws" {
-  region = "ap-southeast-1"
+  region = "ap-southeast-2"
 }
 
 ############################################
@@ -30,7 +30,6 @@ resource "random_string" "suffix" {
 ############################################
 
 data "aws_region" "current" {}
-data "aws_availability_zones" "available" {}
 
 data "http" "my_public_ip" {
   url = "http://ifconfig.me/ip"
@@ -59,7 +58,7 @@ module "vpc" {
 
   vpc_name           = local.base_name
   vpc_cidr           = "10.0.0.0/16"
-  availability_zones = slice(data.aws_availability_zones.available.names, 0, 3)
+  availability_zones = ["ap-southeast-2a", "ap-southeast-2b", "ap-southeast-2c"]
 
   public_subnets  = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
   private_subnets = ["10.0.101.0/24", "10.0.102.0/24", "10.0.103.0/24"]
@@ -186,7 +185,7 @@ module "ecs_cluster_fargate" {
             logDriver = "awslogs"
             options = {
               awslogs-group         = "/aws/ecs/${local.name}-web-app"
-              awslogs-region        = data.aws_region.current.name
+              awslogs-region        = data.aws_region.current.region
               awslogs-stream-prefix = "${local.name}-nginx"
             }
           }
