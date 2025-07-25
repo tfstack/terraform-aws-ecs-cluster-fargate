@@ -1,23 +1,20 @@
-run "setup_ecs" {
-  module {
-    source = "./tests/setup"
-  }
-}
-
 run "ecs_cluster_test" {
+  command = plan
   variables {
-    cluster_name = run.setup_ecs.cluster_name
-    suffix       = run.setup_ecs.suffix
+    cluster_name = "test-cluster"
+    suffix       = "test"
 
     vpc = {
-      id = run.setup_ecs.vpc_id
+      id = "vpc-12345678"
       private_subnets = [
-        for i, subnet in run.setup_ecs.private_subnets :
-        { id = subnet, cidr = run.setup_ecs.private_subnets_cidr_blocks[i] }
+        { id = "subnet-12345678", cidr = "10.0.101.0/24" },
+        { id = "subnet-23456789", cidr = "10.0.102.0/24" },
+        { id = "subnet-34567890", cidr = "10.0.103.0/24" }
       ]
       public_subnets = [
-        for i, subnet in run.setup_ecs.public_subnets :
-        { id = subnet, cidr = run.setup_ecs.public_subnets_cidr_blocks[i] }
+        { id = "subnet-45678901", cidr = "10.0.1.0/24" },
+        { id = "subnet-56789012", cidr = "10.0.2.0/24" },
+        { id = "subnet-67890123", cidr = "10.0.3.0/24" }
       ]
     }
 
@@ -42,7 +39,7 @@ run "ecs_cluster_test" {
 
     ecs_services = [
       {
-        name                 = run.setup_ecs.app_name
+        name                 = "web"
         desired_count        = 3
         cpu                  = "256"
         memory               = "512"
@@ -55,7 +52,7 @@ run "ecs_cluster_test" {
 
         container_definitions = jsonencode([
           {
-            name      = run.setup_ecs.app_name
+            name      = "web"
             image     = "nginx:latest"
             cpu       = 256
             memory    = 512
@@ -73,9 +70,9 @@ run "ecs_cluster_test" {
             logConfiguration = {
               logDriver = "awslogs"
               options = {
-                awslogs-group         = "/aws/ecs/${run.setup_ecs.cluster_name}-${run.setup_ecs.app_name}"
-                awslogs-region        = run.setup_ecs.region
-                awslogs-stream-prefix = "${run.setup_ecs.cluster_name}-nginx"
+                awslogs-group         = "/aws/ecs/test-cluster-web"
+                awslogs-region        = "us-east-1"
+                awslogs-stream-prefix = "test-cluster-nginx"
               }
             }
           }
@@ -85,8 +82,8 @@ run "ecs_cluster_test" {
         deployment_maximum_percent         = 200
         health_check_grace_period_seconds  = 30
 
-        subnet_ids       = run.setup_ecs.private_subnets
-        security_groups  = [run.setup_ecs.security_group_id]
+        subnet_ids       = ["subnet-12345678", "subnet-23456789", "subnet-34567890"]
+        security_groups  = ["sg-12345678"]
         assign_public_ip = false
 
         enable_alb              = true
@@ -108,7 +105,7 @@ run "ecs_cluster_test" {
 
     ecs_autoscaling = [
       {
-        service_name           = "${run.setup_ecs.cluster_name}-${run.setup_ecs.app_name}"
+        service_name           = "test-cluster-web"
         min_capacity           = 3
         max_capacity           = 12
         scalable_dimension     = "ecs:service:DesiredCount"
@@ -119,7 +116,10 @@ run "ecs_cluster_test" {
       }
     ]
 
-    tags = run.setup_ecs.tags
+    tags = {
+      Environment = "test"
+      Project     = "example"
+    }
   }
 
   assert {
