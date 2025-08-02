@@ -10,12 +10,20 @@ output "ecs_cluster_arn" {
 
 output "ecs_services" {
   description = "Map of ECS services with their ARNs."
-  value = {
-    for s in aws_ecs_service.this :
-    s.name => {
-      arn = s.id
+  value = merge(
+    {
+      for s in aws_ecs_service.with_autoscaling :
+      s.name => {
+        arn = s.id
+      }
+    },
+    {
+      for s in aws_ecs_service.without_autoscaling :
+      s.name => {
+        arn = s.id
+      }
     }
-  }
+  )
 }
 
 output "ecs_task_definitions" {
@@ -92,4 +100,44 @@ output "alb_target_group_arns" {
   value = {
     for k, alb in module.aws_alb : k => coalesce(alb.http_target_group_arn, alb.https_target_group_arn)
   }
+}
+
+output "service_discovery_namespace_id" {
+  description = "ID of the service discovery namespace"
+  value       = length(module.service_discovery_private) > 0 ? module.service_discovery_private[0].namespace_id : null
+}
+
+output "service_discovery_namespace_name" {
+  description = "Name of the service discovery namespace"
+  value       = length(module.service_discovery_private) > 0 ? module.service_discovery_private[0].namespace_name : null
+}
+
+output "service_discovery_services" {
+  description = "Map of service discovery services"
+  value       = length(module.service_discovery_private) > 0 ? module.service_discovery_private[0].services : {}
+}
+
+output "service_discovery_service_arns" {
+  description = "Map of service names to their ARNs for service discovery"
+  value       = length(module.service_discovery_private) > 0 ? module.service_discovery_private[0].service_arns : {}
+}
+
+output "public_service_discovery_namespace_id" {
+  description = "ID of the public service discovery namespace"
+  value       = length(module.service_discovery_public) > 0 ? module.service_discovery_public[0].namespace_id : null
+}
+
+output "public_service_discovery_namespace_name" {
+  description = "Name of the public service discovery namespace"
+  value       = length(module.service_discovery_public) > 0 ? module.service_discovery_public[0].namespace_name : null
+}
+
+output "public_service_discovery_services" {
+  description = "Map of public service discovery services"
+  value       = length(module.service_discovery_public) > 0 ? module.service_discovery_public[0].services : {}
+}
+
+output "public_service_discovery_service_arns" {
+  description = "Map of service names to their ARNs for public service discovery"
+  value       = length(module.service_discovery_public) > 0 ? module.service_discovery_public[0].service_arns : {}
 }
