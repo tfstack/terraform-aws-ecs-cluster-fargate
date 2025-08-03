@@ -175,8 +175,27 @@ variable "ecs_services" {
     security_groups  = list(string)
     assign_public_ip = optional(bool, false)
 
-    enable_alb   = optional(bool, false)
-    enable_https = optional(bool, false)
+    enable_alb         = optional(bool, false)
+    enable_https       = optional(bool, false)
+    allowed_http_cidrs = optional(list(string), ["0.0.0.0/0"])
+    enable_autoscaling = optional(bool, false)
+
+    # Service Discovery Configuration (mutually exclusive - choose one)
+    enable_private_service_discovery = optional(bool, false) # Enable private DNS namespace for internal service-to-service communication
+    enable_public_service_discovery  = optional(bool, false) # Enable public DNS namespace for external service discovery with health checks
+    health_check_path                = optional(string, "/") # Health check path for public service discovery Route 53 health checks
+
+    # Legacy service discovery configuration (for backward compatibility)
+    enable_service_discovery = optional(bool, false) # Enable service discovery (legacy)
+    service_discovery_config = optional(object({
+      namespace_id = optional(string)
+      service_name = string
+      dns_config = object({
+        ttl            = number
+        type           = string
+        routing_policy = string
+      })
+    }))
 
     enable_ecs_managed_tags = optional(bool, false)
     propagate_tags          = optional(string, "TASK_DEFINITION")
@@ -233,6 +252,27 @@ variable "ecs_services" {
   validation {
     condition     = alltrue([for s in var.ecs_services : s.enable_https == false])
     error_message = "HTTPS is not supported. Set enable_https to false."
+  }
+
+  validation {
+    condition = alltrue([
+      for s in var.ecs_services : !(s.enable_private_service_discovery && s.enable_public_service_discovery)
+    ])
+    error_message = "A service cannot enable both private and public service discovery simultaneously. Choose one: enable_private_service_discovery OR enable_public_service_discovery."
+  }
+
+  validation {
+    condition = alltrue([
+      for s in var.ecs_services : !(s.enable_service_discovery && (s.enable_private_service_discovery || s.enable_public_service_discovery))
+    ])
+    error_message = "Legacy enable_service_discovery cannot be used with the new service discovery configuration. Use enable_private_service_discovery or enable_public_service_discovery instead."
+  }
+
+  validation {
+    condition = alltrue([
+      for s in var.ecs_services : s.enable_service_discovery == false || s.service_discovery_config != null
+    ])
+    error_message = "service_discovery_config must be provided when enable_service_discovery is true."
   }
 }
 

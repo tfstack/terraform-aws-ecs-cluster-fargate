@@ -41,7 +41,8 @@ data "http" "my_public_ip" {
 
 locals {
   name      = "cltest"
-  base_name = "${local.name}-${random_string.suffix.result}"
+  base_name = local.suffix != "" ? "${local.name}-${local.suffix}" : local.name
+  suffix    = random_string.suffix.result
 
   tags = {
     Environment = "dev"
@@ -184,9 +185,9 @@ module "ecs_cluster_fargate" {
           logConfiguration = {
             logDriver = "awslogs"
             options = {
-              awslogs-group         = "/aws/ecs/${local.name}-web-app"
+              awslogs-group         = "/aws/ecs/${local.base_name}-web-app"
               awslogs-region        = data.aws_region.current.region
-              awslogs-stream-prefix = "${local.name}-nginx"
+              awslogs-stream-prefix = "${local.base_name}-nginx"
             }
           }
         }

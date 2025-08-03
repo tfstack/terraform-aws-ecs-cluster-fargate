@@ -1,15 +1,37 @@
-# Terraform ECS Fargate Complete Configuration
+# Terraform ECS Fargate Basic Configuration
 
-This Terraform configuration provisions an **Amazon ECS cluster** using the **Fargate launch type**, including networking, security groups, logging, and autoscaling configurations.
+This Terraform configuration demonstrates a **basic Amazon ECS cluster** setup using the **Fargate launch type**, including networking, security groups, logging, and autoscaling configurations.
 
 ## Features
+
+This basic example demonstrates:
 
 - **VPC Setup**: Creates a VPC with private and public subnets.
 - **ECS Cluster**: Deploys an ECS cluster with **Fargate** and **Fargate Spot** capacity providers.
 - **Security Groups**: Configures security groups for ECS tasks and ALB.
 - **CloudWatch Logs**: Enables logging for ECS services.
-- **Auto Scaling**: Configures ECS service autoscaling.
-- **Application Load Balancer (ALB)**: Optional ALB setup for ECS services.
+- **Auto Scaling**: Configures basic ECS service autoscaling.
+- **Application Load Balancer (ALB)**: ALB setup for ECS services.
+- **Single Service**: Demonstrates a single web application service.
+
+## What This Example Covers
+
+This basic example shows the fundamental features of the ECS Fargate module:
+
+- Basic cluster setup with capacity providers
+- Single service deployment with ALB
+- CloudWatch and S3 logging
+- Basic autoscaling configuration
+- VPC and security group setup
+
+## What This Example Does NOT Cover
+
+For more advanced features, see other examples:
+
+- **Service Discovery**: See the `service-discovery` example
+- **Multiple Services**: See the `complete` example (when available)
+- **Advanced Autoscaling**: See examples with custom metrics
+- **Service Connect**: See examples with service mesh features
 
 ## Usage
 
@@ -69,4 +91,4 @@ terraform destroy
 - **Application Load Balancer (ALB)** (if enabled)
 - **Auto Scaling Policies** for ECS services
 
-This configuration ensures a **highly available and scalable ECS deployment** using AWS Fargate.
+This configuration demonstrates a **basic but functional ECS deployment** using AWS Fargate, suitable for learning and simple production workloads.
