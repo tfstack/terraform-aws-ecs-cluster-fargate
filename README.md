@@ -17,7 +17,7 @@ Terraform module to create an ECS Fargate cluster with optional CloudWatch monit
 
 | Name | Version |
 |------|---------|
-| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.5.0 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.6.0 |
 
 ## Modules
 
@@ -25,6 +25,8 @@ Terraform module to create an ECS Fargate cluster with optional CloudWatch monit
 |------|--------|---------|
 | <a name="module_aws_alb"></a> [aws\_alb](#module\_aws\_alb) | tfstack/alb/aws | n/a |
 | <a name="module_s3_bucket"></a> [s3\_bucket](#module\_s3\_bucket) | tfstack/s3/aws | n/a |
+| <a name="module_service_discovery_private"></a> [service\_discovery\_private](#module\_service\_discovery\_private) | tfstack/cloudmap/aws | n/a |
+| <a name="module_service_discovery_public"></a> [service\_discovery\_public](#module\_service\_discovery\_public) | ./modules/cloudmap | n/a |
 
 ## Resources
 
@@ -36,7 +38,8 @@ Terraform module to create an ECS Fargate cluster with optional CloudWatch monit
 | [aws_cloudwatch_log_group.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
 | [aws_ecs_cluster.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_cluster) | resource |
 | [aws_ecs_cluster_capacity_providers.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_cluster_capacity_providers) | resource |
-| [aws_ecs_service.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_service) | resource |
+| [aws_ecs_service.with_autoscaling](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_service) | resource |
+| [aws_ecs_service.without_autoscaling](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_service) | resource |
 | [aws_ecs_task_definition.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_task_definition) | resource |
 | [aws_iam_policy.ecs_cloudwatch_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.ecs_ecr_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
@@ -59,7 +62,7 @@ Terraform module to create an ECS Fargate cluster with optional CloudWatch monit
 | <a name="input_create_cloudwatch_log_group"></a> [create\_cloudwatch\_log\_group](#input\_create\_cloudwatch\_log\_group) | Enable or disable the creation of a CloudWatch Log Group for ECS logs. | `bool` | `false` | no |
 | <a name="input_create_s3_logging_bucket"></a> [create\_s3\_logging\_bucket](#input\_create\_s3\_logging\_bucket) | Enable or disable the creation of an S3 bucket for ECS logs. | `bool` | `false` | no |
 | <a name="input_ecs_autoscaling"></a> [ecs\_autoscaling](#input\_ecs\_autoscaling) | List of ECS service auto scaling configurations | <pre>list(object({<br/>    service_name       = string<br/>    min_capacity       = number<br/>    max_capacity       = number<br/>    scalable_dimension = string<br/>    policy_name        = string<br/>    policy_type        = string<br/>    target_value       = number<br/><br/>    predefined_metric_type = optional(string)<br/>    custom_metric = optional(object({<br/>      metric_name = string<br/>      namespace   = string<br/>      statistic   = string<br/>      dimensions = optional(list(object({<br/>        name  = string<br/>        value = string<br/>      })), [])<br/>    }))<br/>  }))</pre> | `[]` | no |
-| <a name="input_ecs_services"></a> [ecs\_services](#input\_ecs\_services) | List of ECS services to be created | <pre>list(object({<br/>    name                  = string<br/>    desired_count         = optional(number, 1)<br/>    cpu                   = optional(string, "256")<br/>    memory                = optional(string, "512")<br/>    container_definitions = string<br/><br/>    execution_role_policies            = optional(list(string), [])<br/>    enable_execute_command             = optional(bool, false)<br/>    force_new_deployment               = optional(bool, false)<br/>    deployment_minimum_healthy_percent = optional(number, 100)<br/>    deployment_maximum_percent         = optional(number, 200)<br/><br/>    subnet_ids       = list(string)<br/>    security_groups  = list(string)<br/>    assign_public_ip = optional(bool, false)<br/><br/>    enable_alb   = optional(bool, false)<br/>    enable_https = optional(bool, false)<br/><br/>    enable_ecs_managed_tags = optional(bool, false)<br/>    propagate_tags          = optional(string, "TASK_DEFINITION")<br/>    service_tags            = optional(map(string))<br/>    task_tags               = optional(map(string))<br/>  }))</pre> | `[]` | no |
+| <a name="input_ecs_services"></a> [ecs\_services](#input\_ecs\_services) | List of ECS services to be created | <pre>list(object({<br/>    name                  = string<br/>    desired_count         = optional(number, 1)<br/>    cpu                   = optional(string, "256")<br/>    memory                = optional(string, "512")<br/>    container_definitions = string<br/><br/>    execution_role_policies            = optional(list(string), [])<br/>    enable_execute_command             = optional(bool, false)<br/>    force_new_deployment               = optional(bool, false)<br/>    deployment_minimum_healthy_percent = optional(number, 100)<br/>    deployment_maximum_percent         = optional(number, 200)<br/><br/>    subnet_ids       = list(string)<br/>    security_groups  = list(string)<br/>    assign_public_ip = optional(bool, false)<br/><br/>    enable_alb         = optional(bool, false)<br/>    enable_https       = optional(bool, false)<br/>    allowed_http_cidrs = optional(list(string), ["0.0.0.0/0"])<br/>    enable_autoscaling = optional(bool, false)<br/><br/>    # Service Discovery Configuration (mutually exclusive - choose one)<br/>    enable_private_service_discovery = optional(bool, false) # Enable private DNS namespace for internal service-to-service communication<br/>    enable_public_service_discovery  = optional(bool, false) # Enable public DNS namespace for external service discovery with health checks<br/>    health_check_path                = optional(string, "/") # Health check path for public service discovery Route 53 health checks<br/><br/>    # Legacy service discovery configuration (for backward compatibility)<br/>    enable_service_discovery = optional(bool, false) # Enable service discovery (legacy)<br/>    service_discovery_config = optional(object({<br/>      namespace_id = optional(string)<br/>      service_name = string<br/>      dns_config = object({<br/>        ttl            = number<br/>        type           = string<br/>        routing_policy = string<br/>      })<br/>    }))<br/><br/>    enable_ecs_managed_tags = optional(bool, false)<br/>    propagate_tags          = optional(string, "TASK_DEFINITION")<br/>    service_tags            = optional(map(string))<br/>    task_tags               = optional(map(string))<br/>  }))</pre> | `[]` | no |
 | <a name="input_s3_key_prefix"></a> [s3\_key\_prefix](#input\_s3\_key\_prefix) | Prefix for logs stored in the S3 bucket. | `string` | `"logs/"` | no |
 | <a name="input_service_connect_defaults"></a> [service\_connect\_defaults](#input\_service\_connect\_defaults) | Default Service Connect configuration for the ECS cluster. | <pre>object({<br/>    namespace = string<br/>  })</pre> | `null` | no |
 | <a name="input_suffix"></a> [suffix](#input\_suffix) | Optional suffix for resource names. | `string` | `""` | no |
@@ -83,4 +86,12 @@ Terraform module to create an ECS Fargate cluster with optional CloudWatch monit
 | <a name="output_ecs_services"></a> [ecs\_services](#output\_ecs\_services) | Map of ECS services with their ARNs. |
 | <a name="output_ecs_task_definitions"></a> [ecs\_task\_definitions](#output\_ecs\_task\_definitions) | Map of ECS task definitions with their ARNs. |
 | <a name="output_ecs_task_execution_roles"></a> [ecs\_task\_execution\_roles](#output\_ecs\_task\_execution\_roles) | IAM roles assigned to ECS task execution. |
+| <a name="output_public_service_discovery_namespace_id"></a> [public\_service\_discovery\_namespace\_id](#output\_public\_service\_discovery\_namespace\_id) | ID of the public service discovery namespace |
+| <a name="output_public_service_discovery_namespace_name"></a> [public\_service\_discovery\_namespace\_name](#output\_public\_service\_discovery\_namespace\_name) | Name of the public service discovery namespace |
+| <a name="output_public_service_discovery_service_arns"></a> [public\_service\_discovery\_service\_arns](#output\_public\_service\_discovery\_service\_arns) | Map of service names to their ARNs for public service discovery |
+| <a name="output_public_service_discovery_services"></a> [public\_service\_discovery\_services](#output\_public\_service\_discovery\_services) | Map of public service discovery services |
+| <a name="output_service_discovery_namespace_id"></a> [service\_discovery\_namespace\_id](#output\_service\_discovery\_namespace\_id) | ID of the service discovery namespace |
+| <a name="output_service_discovery_namespace_name"></a> [service\_discovery\_namespace\_name](#output\_service\_discovery\_namespace\_name) | Name of the service discovery namespace |
+| <a name="output_service_discovery_service_arns"></a> [service\_discovery\_service\_arns](#output\_service\_discovery\_service\_arns) | Map of service names to their ARNs for service discovery |
+| <a name="output_service_discovery_services"></a> [service\_discovery\_services](#output\_service\_discovery\_services) | Map of service discovery services |
 <!-- END_TF_DOCS -->
