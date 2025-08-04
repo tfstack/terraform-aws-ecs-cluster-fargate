@@ -283,6 +283,7 @@ module "ecs_cluster_fargate" {
       allowed_http_cidrs               = [local.web_access_cidr] # Restrict to your IP only
       enable_autoscaling               = true
       enable_private_service_discovery = true # Use private for internal service-to-service communication
+      service_discovery_container_name = "nginx-webapp"
       enable_ecs_managed_tags          = true
       propagate_tags                   = "TASK_DEFINITION"
 
@@ -351,6 +352,7 @@ module "ecs_cluster_fargate" {
       allowed_http_cidrs               = [local.web_access_cidr] # Restrict to your IP only
       enable_autoscaling               = true
       enable_private_service_discovery = true # Use private for internal service-to-service communication
+      service_discovery_container_name = "hello-webapp"
       enable_ecs_managed_tags          = true
       health_check_path                = "/health" # Go app health endpoint
       propagate_tags                   = "TASK_DEFINITION"
@@ -426,6 +428,7 @@ module "ecs_cluster_fargate" {
       enable_alb                       = false # No ALB needed for test service
       enable_autoscaling               = false # No autoscaling for test service
       enable_private_service_discovery = true
+      service_discovery_container_name = "test-service"
       enable_ecs_managed_tags          = true
       propagate_tags                   = "TASK_DEFINITION"
 
@@ -539,4 +542,13 @@ output "public_service_discovery_namespace" {
 output "public_service_discovery_services" {
   description = "Public service discovery services"
   value       = module.ecs_cluster_fargate.public_service_discovery_services
+}
+
+output "private_service_discovery_arns" {
+  value = module.ecs_cluster_fargate.service_discovery_service_arns
+}
+
+output "private_service_discovery_arns" {
+  description = "Map of ECS service names to their private Cloud Map service ARNs for use in ECS serviceRegistries"
+  value       = module.ecs_cluster_fargate.service_discovery_service_arns
 }

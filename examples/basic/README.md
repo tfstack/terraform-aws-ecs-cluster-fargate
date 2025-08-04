@@ -28,10 +28,21 @@ This basic example shows the fundamental features of the ECS Fargate module:
 
 For more advanced features, see other examples:
 
-- **Service Discovery**: See the `service-discovery` example
+- **Service Discovery**: See the `service-discovery` example for private/public DNS-based service discovery
 - **Multiple Services**: See the `complete` example (when available)
 - **Advanced Autoscaling**: See examples with custom metrics
 - **Service Connect**: See examples with service mesh features
+
+## Service Discovery
+
+While this basic example doesn't include service discovery, the module supports both private and public service discovery:
+
+```hcl
+enable_private_service_discovery = true  # For internal service-to-service communication
+# OR
+enable_public_service_discovery = true   # For external service discovery with health checks
+service_discovery_container_name = "app" # Optional: defaults to service name
+```
 
 ## Usage
 

@@ -263,6 +263,7 @@ run "ecs_cluster_with_service_discovery_test" {
         enable_alb                       = false
         enable_private_service_discovery = true
         health_check_path                = "/"
+        service_discovery_container_name = "backend-app" # Test explicit container name
 
         enable_ecs_managed_tags = true
         propagate_tags          = "TASK_DEFINITION"
