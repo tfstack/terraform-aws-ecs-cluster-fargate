@@ -101,38 +101,38 @@ terraform destroy
 
 ### Service Discovery Setup
 
-The example uses the module's built-in service discovery features:
+The example uses the module's built-in service discovery features. The module automatically creates service discovery namespaces when services are configured with service discovery enabled:
 
 ```hcl
-# Enable service discovery namespace creation
-create_service_discovery_namespace = true
-service_discovery_namespace = {
-  name        = "internal"
-  description = "Internal service discovery namespace for service discovery demo"
-}
+# No manual namespace configuration needed!
+# The module automatically creates namespaces when services use:
+# - enable_private_service_discovery = true  (creates private DNS namespace)
+# - enable_public_service_discovery = true   (creates public DNS namespace)
 ```
 
 ### Service Configuration with Service Discovery
 
-Each service is configured with service discovery:
+Each service is configured with service discovery using the new simplified configuration:
 
 ```hcl
 {
-  name = "name-service"
+  name = "hello-service"
   # ... other configuration ...
 
-  enable_service_discovery = true
-  service_discovery_config = {
-    namespace_id = null  # Will use the created namespace
-    service_name = "name-service"
-    dns_config = {
-      ttl  = 10
-      type = "A"
-      routing_policy = "MULTIVALUE"
-    }
-  }
+  enable_private_service_discovery = true  # Enable private DNS namespace
+  # OR
+  enable_public_service_discovery = true   # Enable public DNS namespace with health checks
+  health_check_path = "/health"            # Health check path for public discovery
+  service_discovery_container_name = "app" # Optional: specify container name (defaults to service name)
 }
 ```
+
+**Key Configuration Options:**
+
+- **`enable_private_service_discovery`**: Creates private DNS namespace for internal service-to-service communication
+- **`enable_public_service_discovery`**: Creates public DNS namespace with Route 53 health checks
+- **`service_discovery_container_name`**: Optional container name for service registry (defaults to service name)
+- **`health_check_path`**: Health check endpoint for public service discovery
 
 ### Module Integration
 

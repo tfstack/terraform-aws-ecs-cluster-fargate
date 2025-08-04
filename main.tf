@@ -28,7 +28,7 @@ module "service_discovery_private" {
 # Public DNS Namespace for external service discovery
 module "service_discovery_public" {
   count  = length(var.ecs_services) > 0 && anytrue([for s in var.ecs_services : s.enable_public_service_discovery]) ? 1 : 0
-  source = "./modules/cloudmap"
+  source = "tfstack/cloudmap/aws"
 
   create_public_dns_namespace = true
   namespace_name              = "${var.cluster_name}-${var.suffix}.com"
@@ -234,6 +234,12 @@ resource "aws_ecs_service" "with_autoscaling" {
 
     content {
       registry_arn = service_registries.value
+      # Container name is required for ECS console integration
+      container_name = coalesce(
+        each.value.service_discovery_container_name,
+        each.value.name,
+        try(jsondecode(each.value.container_definitions)[0].name, each.value.name)
+      )
       # Port is required for public service discovery with Route 53 health checks
       port = each.value.enable_public_service_discovery ? (
         try(jsondecode(each.value.container_definitions)[0].portMappings[0].containerPort, null)
@@ -303,6 +309,12 @@ resource "aws_ecs_service" "without_autoscaling" {
 
     content {
       registry_arn = service_registries.value
+      # Container name is required for ECS console integration
+      container_name = coalesce(
+        each.value.service_discovery_container_name,
+        each.value.name,
+        try(jsondecode(each.value.container_definitions)[0].name, each.value.name)
+      )
       # Port is required for public service discovery with Route 53 health checks
       port = each.value.enable_public_service_discovery ? (
         try(jsondecode(each.value.container_definitions)[0].portMappings[0].containerPort, null)

@@ -184,6 +184,7 @@ variable "ecs_services" {
     enable_private_service_discovery = optional(bool, false) # Enable private DNS namespace for internal service-to-service communication
     enable_public_service_discovery  = optional(bool, false) # Enable public DNS namespace for external service discovery with health checks
     health_check_path                = optional(string, "/") # Health check path for public service discovery Route 53 health checks
+    service_discovery_container_name = optional(string)      # Container name for service discovery (defaults to service name)
 
     # Legacy service discovery configuration (for backward compatibility)
     enable_service_discovery = optional(bool, false) # Enable service discovery (legacy)
