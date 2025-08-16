@@ -16,23 +16,13 @@ provider "aws" {
 }
 
 ############################################
-# Random Suffix for Resource Names
-############################################
-
-resource "random_string" "suffix" {
-  length  = 4
-  special = false
-  upper   = false
-}
-
-############################################
 # Data Sources
 ############################################
 
 data "aws_region" "current" {}
 
 data "http" "my_public_ip" {
-  url = "http://ifconfig.me/ip"
+  url = "https://checkip.amazonaws.com/"
 }
 
 ############################################
@@ -41,14 +31,12 @@ data "http" "my_public_ip" {
 
 locals {
   azs             = ["ap-southeast-2a", "ap-southeast-2b", "ap-southeast-2c"]
-  name            = "svc-discovery"
-  base_name       = local.suffix != "" ? "${local.name}-${local.suffix}" : local.name
-  suffix          = random_string.suffix.result
+  name            = "example"
   private_subnets = ["10.0.101.0/24", "10.0.102.0/24", "10.0.103.0/24"]
   public_subnets  = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
   region          = "ap-southeast-2"
   vpc_cidr        = "10.0.0.0/16"
-  web_access_cidr = "${data.http.my_public_ip.response_body}/32"
+  web_access_cidr = "${trimspace(data.http.my_public_ip.response_body)}/32"
   tags = {
     Environment = "dev"
     Project     = "example"
@@ -56,9 +44,9 @@ locals {
 
   # Service port mapping
   service_ports = {
-    "nginx-webapp" = 80
-    "hello-webapp" = 8080
-    "test-service" = null # No port needed for test service
+    "web2"   = 80
+    "web1"   = 8080
+    "pinger" = null # No port needed for test service
   }
 }
 
@@ -69,7 +57,7 @@ locals {
 module "aws_vpc" {
   source = "cloudbuildlab/vpc/aws"
 
-  vpc_name           = local.base_name
+  vpc_name           = local.name
   vpc_cidr           = local.vpc_cidr
   availability_zones = local.azs
 
@@ -84,23 +72,46 @@ module "aws_vpc" {
   tags = local.tags
 }
 
+############################################################
+# Jumphost
+############################################################
+
+module "jumphost" {
+  source = "tfstack/jumphost/aws"
+
+  name      = "${local.name}-jumphost"
+  ami_type  = "amazonlinux2"
+  subnet_id = module.aws_vpc.private_subnet_ids[0]
+  vpc_id    = module.aws_vpc.vpc_id
+
+  create_security_group = true
+  allowed_cidr_blocks   = [local.web_access_cidr]
+  assign_eip            = false
+
+  user_data_extra = <<-EOT
+    yum install -y mtr nc
+  EOT
+
+  tags = local.tags
+}
+
 # ############################################
 # # Security Groups
 # ############################################
 
-# Security group for nginx webapp
-resource "aws_security_group" "nginx_webapp" {
-  name        = "${local.base_name}-nginx-webapp"
-  description = "Security group for nginx webapp - allows ALB health checks and HTTP traffic"
+# Security group for web2
+resource "aws_security_group" "web2" {
+  name        = "${local.name}-web2"
+  description = "Security group for web2 - allows ALB health checks and HTTP traffic"
   vpc_id      = module.aws_vpc.vpc_id
 
   # Allow inbound HTTP traffic from ALB on port 80 (nginx default)
   ingress {
-    description = "HTTP from ALB for nginx health checks and web traffic"
+    description = "HTTP from ALB for web2 health checks and web traffic"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # Allow ALB health checks and nginx web traffic
+    cidr_blocks = ["0.0.0.0/0"] # Allow ALB health checks and web2 web traffic
   }
 
   # Allow all outbound traffic
@@ -112,18 +123,18 @@ resource "aws_security_group" "nginx_webapp" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = merge(local.tags, { Name = "${local.base_name}-web-app" })
+  tags = merge(local.tags, { Name = "${local.name}-web2" })
 }
 
-# Security group for the hello webapp (Go service)
-resource "aws_security_group" "hello_webapp" {
-  name        = "${local.base_name}-hello-webapp"
-  description = "Security group for Go hello webapp - allows ALB health checks and traffic"
+# Security group for the web1
+resource "aws_security_group" "web1" {
+  name        = "${local.name}-web1"
+  description = "Security group for web1 - allows ALB health checks and traffic"
   vpc_id      = module.aws_vpc.vpc_id
 
   # Allow inbound HTTP traffic from ALB on port 8080
   ingress {
-    description = "HTTP from ALB for health checks and traffic"
+    description = "HTTP from ALB for web1 health checks and traffic"
     from_port   = 8080
     to_port     = 8080
     protocol    = "tcp"
@@ -139,40 +150,13 @@ resource "aws_security_group" "hello_webapp" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = merge(local.tags, { Name = "${local.base_name}-hello-webapp" })
+  tags = merge(local.tags, { Name = "${local.name}-web1" })
 }
 
-# Security group for the hello service (frontend)
-resource "aws_security_group" "hello_service" {
-  name        = "${local.base_name}-hello"
-  description = "Security group for hello service - allows ALB health checks and traffic"
-  vpc_id      = module.aws_vpc.vpc_id
-
-  # Allow inbound HTTP traffic from ALB
-  ingress {
-    description = "HTTP from ALB for health checks and traffic"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # Allow ALB health checks and traffic
-  }
-
-  # Allow all outbound traffic
-  egress {
-    description = "All outbound traffic"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = merge(local.tags, { Name = "${local.base_name}-hello" })
-}
-
-# Security group for the test service
-resource "aws_security_group" "test_service" {
-  name        = "${local.base_name}-test-service"
-  description = "Security group for test service - allows outbound to other services"
+# Security group for the pinger
+resource "aws_security_group" "pinger" {
+  name        = "${local.name}-pinger"
+  description = "Security group for pinger - allows outbound to other services"
   vpc_id      = module.aws_vpc.vpc_id
 
   # Allow all outbound traffic to reach other services
@@ -184,7 +168,7 @@ resource "aws_security_group" "test_service" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = merge(local.tags, { Name = "${local.base_name}-test-service" })
+  tags = merge(local.tags, { Name = "${local.name}-pinger" })
 }
 
 # ############################################
@@ -197,7 +181,7 @@ module "ecs_cluster_fargate" {
 
   # Core Configuration
   cluster_name = local.name
-  suffix       = random_string.suffix.result
+  suffix       = ""
 
   # VPC Configuration
   vpc = {
@@ -233,7 +217,7 @@ module "ecs_cluster_fargate" {
 
   ecs_services = [
     {
-      name                 = "nginx-webapp"
+      name                 = "web2"
       desired_count        = 1
       cpu                  = "256"
       memory               = "512"
@@ -245,7 +229,7 @@ module "ecs_cluster_fargate" {
 
       container_definitions = jsonencode([
         {
-          name      = "nginx-webapp"
+          name      = "web2"
           image     = "nginx:latest"
           cpu       = 256
           memory    = 512
@@ -263,9 +247,9 @@ module "ecs_cluster_fargate" {
           logConfiguration = {
             logDriver = "awslogs"
             options = {
-              awslogs-group         = "/aws/ecs/${local.base_name}-nginx-webapp"
+              awslogs-group         = "/aws/ecs/${local.name}-web2"
               awslogs-region        = data.aws_region.current.region
-              awslogs-stream-prefix = "${local.base_name}-nginx"
+              awslogs-stream-prefix = "${local.name}-web2"
             }
           }
         }
@@ -276,21 +260,21 @@ module "ecs_cluster_fargate" {
       health_check_grace_period_seconds  = 30
 
       subnet_ids       = module.aws_vpc.private_subnet_ids
-      security_groups  = [aws_security_group.nginx_webapp.id]
+      security_groups  = [aws_security_group.web2.id]
       assign_public_ip = false
 
       enable_alb                       = true
       allowed_http_cidrs               = [local.web_access_cidr] # Restrict to your IP only
       enable_autoscaling               = true
       enable_private_service_discovery = true # Use private for internal service-to-service communication
-      service_discovery_container_name = "nginx-webapp"
+      service_discovery_container_name = "web2"
       enable_ecs_managed_tags          = true
       propagate_tags                   = "TASK_DEFINITION"
 
       service_tags = {
-        Environment = "staging"
-        Project     = "NginxWebApp"
-        Owner       = "DevOps"
+        Environment = "dev"
+        Project     = "web2"
+        Owner       = "devops"
       }
 
       task_tags = {
@@ -299,7 +283,7 @@ module "ecs_cluster_fargate" {
       }
     },
     {
-      name                 = "hello-webapp"
+      name                 = "web1"
       desired_count        = 1
       cpu                  = "256"
       memory               = "512"
@@ -311,7 +295,7 @@ module "ecs_cluster_fargate" {
 
       container_definitions = jsonencode([
         {
-          name      = "hello-webapp"
+          name      = "web1"
           image     = "ghcr.io/platformfuzz/go-hello-service:latest"
           cpu       = 256
           memory    = 512
@@ -332,9 +316,9 @@ module "ecs_cluster_fargate" {
           logConfiguration = {
             logDriver = "awslogs"
             options = {
-              awslogs-group         = "/aws/ecs/${local.base_name}-hello-webapp"
+              awslogs-group         = "/aws/ecs/${local.name}-web1"
               awslogs-region        = data.aws_region.current.region
-              awslogs-stream-prefix = "${local.base_name}-hello-webapp"
+              awslogs-stream-prefix = "${local.name}-web1"
             }
           }
         }
@@ -345,22 +329,22 @@ module "ecs_cluster_fargate" {
       health_check_grace_period_seconds  = 30
 
       subnet_ids       = module.aws_vpc.private_subnet_ids
-      security_groups  = [aws_security_group.hello_webapp.id] # Go service on port 8080
+      security_groups  = [aws_security_group.web1.id] # Go service on port 8080
       assign_public_ip = false
 
       enable_alb                       = true
       allowed_http_cidrs               = [local.web_access_cidr] # Restrict to your IP only
       enable_autoscaling               = true
       enable_private_service_discovery = true # Use private for internal service-to-service communication
-      service_discovery_container_name = "hello-webapp"
+      service_discovery_container_name = "web1"
       enable_ecs_managed_tags          = true
       health_check_path                = "/health" # Go app health endpoint
       propagate_tags                   = "TASK_DEFINITION"
 
       service_tags = {
         Environment = "dev"
-        Project     = "hello-webapp"
-        Owner       = "DevOps"
+        Project     = "web1"
+        Owner       = "devops"
       }
 
       task_tags = {
@@ -369,7 +353,7 @@ module "ecs_cluster_fargate" {
       }
     },
     {
-      name                 = "test-service"
+      name                 = "pinger"
       desired_count        = 1
       cpu                  = "256"
       memory               = "512"
@@ -381,13 +365,13 @@ module "ecs_cluster_fargate" {
 
       container_definitions = jsonencode([
         {
-          name      = "test-service"
+          name      = "pinger"
           image     = "curlimages/curl:latest"
           cpu       = 256
           memory    = 512
           essential = true
           healthCheck = {
-            command     = ["CMD-SHELL", "echo 'test-service is healthy'"]
+            command     = ["CMD-SHELL", "echo 'pinger is healthy'"]
             interval    = 30
             timeout     = 5
             retries     = 3
@@ -399,8 +383,8 @@ module "ecs_cluster_fargate" {
             <<-EOT
               while true; do
                 echo 'Testing service discovery...'
-                curl -s -f http://nginx-webapp.${local.base_name}-internal:80 > /dev/null && echo 'http://nginx-webapp.svc-discovery-${local.suffix}-internal:80 = ok' || echo 'http://nginx-webapp.svc-discovery-${local.suffix}-internal:80 = fail'
-                curl -s -f http://hello-webapp.${local.base_name}-internal:8080 > /dev/null && echo 'http://hello-webapp.svc-discovery-${local.suffix}-internal:8080 = ok' || echo 'http://hello-webapp.svc-discovery-${local.suffix}-internal:8080 = fail'
+                curl -s -f http://web2.internal.${local.name}.local:80 > /dev/null && echo 'http://web2.internal.${local.name}.local:80 = ok' || echo 'http://web2.internal.${local.name}.local:80 = fail'
+                curl -s -f http://web1.internal.${local.name}.local:8080 > /dev/null && echo 'http://web1.internal.${local.name}.local:8080 = ok' || echo 'http://web1.internal.${local.name}.local:8080 = fail'
                 echo 'Sleeping for 30 seconds...'
                 sleep 30
               done
@@ -409,9 +393,9 @@ module "ecs_cluster_fargate" {
           logConfiguration = {
             logDriver = "awslogs"
             options = {
-              awslogs-group         = "/aws/ecs/${local.base_name}-test-service"
+              awslogs-group         = "/aws/ecs/${local.name}-pinger"
               awslogs-region        = data.aws_region.current.region
-              awslogs-stream-prefix = "${local.base_name}-test-service"
+              awslogs-stream-prefix = "${local.name}-pinger"
             }
           }
         }
@@ -422,20 +406,20 @@ module "ecs_cluster_fargate" {
       health_check_grace_period_seconds  = 30
 
       subnet_ids       = module.aws_vpc.private_subnet_ids
-      security_groups  = [aws_security_group.test_service.id]
+      security_groups  = [aws_security_group.pinger.id]
       assign_public_ip = false
 
       enable_alb                       = false # No ALB needed for test service
       enable_autoscaling               = false # No autoscaling for test service
       enable_private_service_discovery = true
-      service_discovery_container_name = "test-service"
+      service_discovery_container_name = "pinger"
       enable_ecs_managed_tags          = true
       propagate_tags                   = "TASK_DEFINITION"
 
       service_tags = {
         Environment = "dev"
-        Project     = "ServiceDiscoveryTest"
-        Owner       = "DevOps"
+        Project     = "pinger"
+        Owner       = "devops"
       }
 
       task_tags = {
@@ -447,7 +431,7 @@ module "ecs_cluster_fargate" {
 
   ecs_autoscaling = [
     {
-      service_name           = "${local.name}-nginx-webapp"
+      service_name           = "${local.name}-web2"
       min_capacity           = 3
       max_capacity           = 6
       scalable_dimension     = "ecs:service:DesiredCount"
@@ -457,7 +441,7 @@ module "ecs_cluster_fargate" {
       predefined_metric_type = "ECSServiceAverageCPUUtilization"
     },
     {
-      service_name           = "${local.name}-hello-webapp"
+      service_name           = "${local.name}-web1"
       min_capacity           = 3
       max_capacity           = 6
       scalable_dimension     = "ecs:service:DesiredCount"
@@ -492,7 +476,7 @@ output "public_subnet_ids" {
 
 output "cluster_name" {
   description = "Name of the ECS cluster"
-  value       = local.base_name
+  value       = local.name
 }
 
 output "cluster_id" {
@@ -542,10 +526,6 @@ output "public_service_discovery_namespace" {
 output "public_service_discovery_services" {
   description = "Public service discovery services"
   value       = module.ecs_cluster_fargate.public_service_discovery_services
-}
-
-output "private_service_discovery_arns" {
-  value = module.ecs_cluster_fargate.service_discovery_service_arns
 }
 
 output "private_service_discovery_arns" {
