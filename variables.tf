@@ -175,10 +175,11 @@ variable "ecs_services" {
     security_groups  = list(string)
     assign_public_ip = optional(bool, false)
 
-    enable_alb         = optional(bool, false)
-    enable_https       = optional(bool, false)
-    allowed_http_cidrs = optional(list(string), ["0.0.0.0/0"])
-    enable_autoscaling = optional(bool, false)
+    enable_alb          = optional(bool, false)
+    enable_internal_alb = optional(bool, false)
+    enable_https        = optional(bool, false)
+    allowed_http_cidrs  = optional(list(string), ["0.0.0.0/0"])
+    enable_autoscaling  = optional(bool, false)
 
     # Service Discovery Configuration (mutually exclusive - choose one)
     enable_private_service_discovery = optional(bool, false) # Enable private DNS namespace for internal service-to-service communication

@@ -16,23 +16,19 @@ provider "aws" {
 }
 
 ############################################
-# Random Suffix for Resource Names
-############################################
-
-resource "random_string" "suffix" {
-  length  = 8
-  special = false
-  upper   = false
-}
-
-############################################
 # Data Sources
 ############################################
 
 data "aws_region" "current" {}
 
 data "http" "my_public_ip" {
-  url = "http://ifconfig.me/ip"
+  url = "https://checkip.amazonaws.com/"
+}
+
+resource "random_string" "suffix" {
+  length  = 4
+  special = false
+  upper   = false
 }
 
 ############################################
@@ -40,9 +36,14 @@ data "http" "my_public_ip" {
 ############################################
 
 locals {
-  name      = "cltest"
-  base_name = local.suffix != "" ? "${local.name}-${local.suffix}" : local.name
-  suffix    = random_string.suffix.result
+  azs             = ["ap-southeast-2a", "ap-southeast-2b", "ap-southeast-2c"]
+  name            = "example"
+  private_subnets = ["10.0.101.0/24", "10.0.102.0/24", "10.0.103.0/24"]
+  public_subnets  = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
+  region          = "ap-southeast-2"
+  vpc_cidr        = "10.0.0.0/16"
+
+  suffix = random_string.suffix.result
 
   tags = {
     Environment = "dev"
@@ -55,51 +56,49 @@ locals {
 ############################################
 
 module "vpc" {
-  source = "tfstack/vpc/aws"
+  source = "cloudbuildlab/vpc/aws"
 
-  vpc_name           = local.base_name
-  vpc_cidr           = "10.0.0.0/16"
-  availability_zones = ["ap-southeast-2a", "ap-southeast-2b", "ap-southeast-2c"]
+  vpc_name           = local.name
+  vpc_cidr           = local.vpc_cidr
+  availability_zones = local.azs
 
-  public_subnets  = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
-  private_subnets = ["10.0.101.0/24", "10.0.102.0/24", "10.0.103.0/24"]
+  public_subnet_cidrs  = local.public_subnets
+  private_subnet_cidrs = local.private_subnets
 
-  eic_subnet        = "none"
-  eic_ingress_cidrs = ["${data.http.my_public_ip.response_body}/32"]
-
-  jumphost_instance_create     = false
-  jumphost_subnet              = "10.0.0.0/24"
-  jumphost_log_prevent_destroy = false
-  create_igw                   = true
-  ngw_type                     = "single"
+  # Enable Internet Gateway & NAT Gateway
+  # A single NAT gateway is used instead of multiple for cost efficiency.
+  create_igw       = true
+  nat_gateway_type = "single"
 
   tags = local.tags
 }
 
-# Security Group
-resource "aws_security_group" "ecs" {
-  name   = "${local.name}-ecs"
-  vpc_id = module.vpc.vpc_id
+# Security Group for ALB
+resource "aws_security_group" "alb" {
+  name        = "${local.name}-alb"
+  description = "Security group for Application Load Balancer"
+  vpc_id      = module.vpc.vpc_id
 
+  # Allow inbound HTTP traffic from internet
   ingress {
+    description = "HTTP from internet"
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
-    description = "allow all incoming traffic"
-    from_port   = 0
-    protocol    = -1
-    self        = "false"
-    to_port     = 0
   }
 
+  # Allow all outbound traffic
   egress {
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "allow all outbound traffic"
+    description = "All outbound traffic"
     from_port   = 0
-    protocol    = "-1"
     to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   tags = {
-    Name = "${local.name}-ecs"
+    Name = "${local.name}-alb"
   }
 }
 
@@ -112,7 +111,7 @@ module "ecs_cluster_fargate" {
 
   # Core Configuration
   cluster_name = local.name
-  suffix       = random_string.suffix.result
+  suffix       = local.suffix
 
   # VPC Configuration
   vpc = {
@@ -154,7 +153,7 @@ module "ecs_cluster_fargate" {
 
   ecs_services = [
     {
-      name                 = "web-app"
+      name                 = "hello-webapp"
       desired_count        = 3
       cpu                  = "256"
       memory               = "512"
@@ -167,27 +166,30 @@ module "ecs_cluster_fargate" {
 
       container_definitions = jsonencode([
         {
-          name      = "web-app"
-          image     = "nginx:latest"
+          name      = "hello-webapp"
+          image     = "ghcr.io/platformfuzz/go-hello-service:latest"
           cpu       = 256
           memory    = 512
           essential = true
           portMappings = [{
-            containerPort = 80
+            containerPort = 8080
           }]
           healthCheck = {
-            command     = ["CMD-SHELL", "curl -f http://127.0.0.1 || exit 1"]
+            command = [
+              "CMD-SHELL",
+              "curl -f http://localhost:8080/health || exit 1"
+            ]
             interval    = 30
             timeout     = 5
             retries     = 3
-            startPeriod = 10
+            startPeriod = 60
           }
           logConfiguration = {
             logDriver = "awslogs"
             options = {
-              awslogs-group         = "/aws/ecs/${local.base_name}-web-app"
+              awslogs-group         = "/aws/ecs/${local.name}-hello-webapp"
               awslogs-region        = data.aws_region.current.region
-              awslogs-stream-prefix = "${local.base_name}-nginx"
+              awslogs-stream-prefix = "${local.name}-hello-webapp"
             }
           }
         }
@@ -198,21 +200,24 @@ module "ecs_cluster_fargate" {
       health_check_grace_period_seconds  = 30
 
       subnet_ids       = module.vpc.private_subnet_ids
-      security_groups  = [aws_security_group.ecs.id]
+      security_groups  = [aws_security_group.alb.id]
       assign_public_ip = false
 
+      # ALB Configuration
       enable_alb              = true
+      enable_internal_alb     = false         # Set to true for internal (private) ALB, false for internet-facing ALB
+      allowed_http_cidrs      = ["0.0.0.0/0"] # Allow HTTP access from anywhere
       enable_ecs_managed_tags = true
       propagate_tags          = "TASK_DEFINITION"
 
       service_tags = {
-        Environment = "staging"
-        Project     = "WebApp"
-        Owner       = "DevOps"
+        Environment = "dev"
+        Project     = "hello-webapp"
+        Owner       = "devops"
       }
 
       task_tags = {
-        TaskType = "backend"
+        TaskType = "frontend"
         Version  = "1.0"
       }
     }
@@ -220,13 +225,13 @@ module "ecs_cluster_fargate" {
 
   ecs_autoscaling = [
     {
-      service_name           = "${local.name}-web-app"
+      service_name           = "${local.name}-hello-webapp"
       min_capacity           = 3
-      max_capacity           = 12
+      max_capacity           = 6
       scalable_dimension     = "ecs:service:DesiredCount"
       policy_name            = "scale-on-cpu"
       policy_type            = "TargetTrackingScaling"
-      target_value           = 75
+      target_value           = 80
       predefined_metric_type = "ECSServiceAverageCPUUtilization"
     }
   ]
@@ -234,8 +239,7 @@ module "ecs_cluster_fargate" {
   tags = local.tags
 }
 
-# Outputs
-output "all_module_outputs" {
-  description = "All outputs from the ECS module"
-  value       = module.ecs_cluster_fargate
+output "alb_http_url" {
+  description = "HTTP URL for the ALB on port 8080"
+  value       = "http://${module.ecs_cluster_fargate.alb_dns_names["hello-webapp"]}:8080"
 }

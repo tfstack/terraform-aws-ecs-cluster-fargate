@@ -7,7 +7,7 @@ module "service_discovery_private" {
   source = "tfstack/cloudmap/aws"
 
   create_private_dns_namespace = true
-  namespace_name               = "${var.cluster_name}-${var.suffix}-internal"
+  namespace_name               = "internal.${var.cluster_name}.local"
   namespace_description        = "Private DNS namespace for ECS service discovery"
   vpc_id                       = var.vpc.id
 
@@ -31,7 +31,7 @@ module "service_discovery_public" {
   source = "tfstack/cloudmap/aws"
 
   create_public_dns_namespace = true
-  namespace_name              = "${var.cluster_name}-${var.suffix}.com"
+  namespace_name              = "${var.cluster_name}.com"
   namespace_description       = "Public DNS namespace for external service discovery"
 
   services = {
@@ -52,11 +52,10 @@ module "service_discovery_public" {
   })
 }
 
-
 resource "aws_cloudwatch_log_group" "this" {
   count = var.create_cloudwatch_log_group ? 1 : 0
 
-  name              = "/aws/ecs/${var.cluster_name}-${var.suffix}"
+  name              = "/aws/ecs/${var.cluster_name}"
   retention_in_days = var.cloudwatch_log_group_retention_days
 
   lifecycle {
@@ -69,14 +68,14 @@ resource "aws_cloudwatch_log_group" "this" {
 resource "aws_cloudwatch_log_group" "ecs_services" {
   for_each = var.create_cloudwatch_log_group ? { for s in var.ecs_services : s.name => s } : {}
 
-  name              = "/aws/ecs/${var.cluster_name}-${var.suffix}-${each.key}"
+  name              = "/aws/ecs/${var.cluster_name}-${each.key}"
   retention_in_days = var.cloudwatch_log_group_retention_days
 
   lifecycle {
     prevent_destroy = false
   }
 
-  tags = merge(var.tags, { Name = "${var.cluster_name}-${var.suffix}-${each.key}" })
+  tags = merge(var.tags, { Name = "${var.cluster_name}-${each.key}" })
 }
 
 module "s3_bucket" {
@@ -167,8 +166,8 @@ module "aws_alb" {
   suffix = var.suffix
   vpc_id = var.vpc.id
 
-  public_subnet_ids   = var.vpc.public_subnets[*].id
-  public_subnet_cidrs = var.vpc.public_subnets[*].cidr
+  private_subnet_ids = each.value.enable_internal_alb ? var.vpc.private_subnets[*].id : []
+  public_subnet_ids  = each.value.enable_internal_alb ? [] : var.vpc.public_subnets[*].id
 
   enable_https     = each.value.enable_https
   http_port        = try(jsondecode(each.value.container_definitions)[0].portMappings[0].containerPort, null)
@@ -177,6 +176,7 @@ module "aws_alb" {
 
   enable_availability_zone_all = false
   allowed_http_cidrs           = each.value.allowed_http_cidrs
+  internal                     = each.value.enable_internal_alb ? true : false
 }
 
 # ECS services with autoscaling enabled (ignore desired_count drift)
@@ -387,7 +387,7 @@ resource "aws_iam_role" "ecs_task_execution" {
 resource "aws_iam_policy" "ecs_cloudwatch_logs" {
   for_each = { for s in var.ecs_services : s.name => s if var.create_cloudwatch_log_group }
 
-  name        = "${var.cluster_name}-${var.suffix}-${each.key}-logs"
+  name        = "${var.cluster_name}-${each.key}-logs"
   description = "IAM policy to allow ECS Task Execution for ${each.key} to write logs to CloudWatch."
 
   policy = jsonencode({
@@ -401,7 +401,7 @@ resource "aws_iam_policy" "ecs_cloudwatch_logs" {
           "logs:CreateLogStream",
           "logs:PutLogEvents"
         ],
-        Resource = "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/ecs/${var.cluster_name}-${var.suffix}-${each.key}*"
+        Resource = "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/ecs/${var.cluster_name}-${each.key}*"
       },
       {
         Sid    = "CloudWatchLogsReadAccess",
