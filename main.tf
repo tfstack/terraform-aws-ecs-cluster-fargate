@@ -326,7 +326,7 @@ resource "aws_ecs_service" "without_autoscaling" {
 }
 
 resource "aws_appautoscaling_target" "this" {
-  for_each = { for asg in var.ecs_autoscaling : asg.service_name => asg }
+  for_each = { for i, asg in var.ecs_autoscaling : i => asg }
 
   resource_id        = "service/${var.cluster_name}/${each.value.service_name}"
   scalable_dimension = each.value.scalable_dimension
@@ -342,7 +342,7 @@ resource "aws_appautoscaling_target" "this" {
 }
 
 resource "aws_appautoscaling_policy" "this" {
-  for_each = { for s in var.ecs_autoscaling : s.service_name => s }
+  for_each = { for i, s in var.ecs_autoscaling : i => s }
 
   name              = each.value.policy_name
   policy_type       = each.value.policy_type
